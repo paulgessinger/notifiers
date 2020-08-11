@@ -10,6 +10,8 @@ from smtplib import SMTPSenderRefused
 from smtplib import SMTPServerDisconnected
 from typing import List
 from typing import Tuple
+from tempfile import NamedTemporaryFile
+import subprocess
 
 from ..core import Provider
 from ..core import Response
@@ -186,3 +188,81 @@ class SMTP(Provider):
         ) as e:
             errors = [str(e)]
         return self.create_response(data, errors=errors)
+
+
+class Sendmail(SMTP):
+  base_url = None
+  site_url = "https://en.wikipedia.org/wiki/Email"
+  name = "sendmail"
+
+  _required = {"required": ["message", "to"]}
+
+  _schema = {
+    "type": "object",
+    "properties": {
+      "message": {"type": "string", "title": "the content of the email message"},
+      "subject": {"type": "string", "title": "the subject of the email message"},
+      "to": one_or_more(
+        {
+          "type": "string",
+          "format": "email",
+          "title": "one or more email addresses to use",
+        }
+      ),
+      "from": {
+        "type": "string",
+        "format": "email",
+        "title": "the FROM address to use in the email",
+      },
+      "from_": {
+        "type": "string",
+        "format": "email",
+        "title": "the FROM address to use in the email",
+        "duplicate": True,
+      },
+      "attachments": one_or_more(
+        {
+          "type": "string",
+          "format": "valid_file",
+          "title": "one or more attachments to use in the email",
+        }
+      ),
+      "html": {
+        "type": "boolean",
+        "title": "should the email be parse as an HTML file",
+      },
+    },
+    "dependencies": {},
+    "additionalProperties": False,
+  }
+
+  @property
+  def defaults(self) -> dict:
+    return {
+      "subject": DEFAULT_SUBJECT,
+      "from": DEFAULT_FROM,
+      "html": False,
+    }
+
+  def _send_notification(self, data: dict) -> Response:
+    errors = None
+    try:
+      email = self._build_email(data)
+      if data.get("attachments"):
+        self._add_attachments(data["attachments"], email)
+
+      cmd = [
+        "sendmail", "-t"
+      ]
+      p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+      output = p.communicate(input=email.as_bytes())[0]
+      p.wait()
+      if p.returncode != 0:
+        raise subprocess.CalledProcessError(p.returncode, cmd, output)
+
+    except (
+      OSError,
+      IOError,
+    ) as e:
+      errors = [str(e)]
+    return self.create_response(data, errors=errors)

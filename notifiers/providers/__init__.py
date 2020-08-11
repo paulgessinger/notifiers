@@ -20,6 +20,7 @@ _all_providers = {
     "simplepush": simplepush.SimplePush,
     "slack": slack.Slack,
     "email": email.SMTP,
+    "sendmail": email.Sendmail,
     "gmail": gmail.Gmail,
     "telegram": telegram.Telegram,
     "gitter": gitter.Gitter,
